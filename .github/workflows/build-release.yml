@@ -44,7 +44,7 @@ jobs:
             libnss3-dev \
             libx11-dev \
             libxss1 \
-            libasound2 \
+            libasound2t64 \
             rpm \
             fakeroot \
             dpkg \

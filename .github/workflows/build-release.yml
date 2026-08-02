@@ -78,6 +78,11 @@ jobs:
           VSCODE_ARCH: x64
           GITHUB_TOKEN: ${{ github.token }}
 
+      - name: Compile
+        run: npm run gulp core-ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
       - name: Compile and package
         run: npm run gulp vscode-linux-x64-min-ci
         env:

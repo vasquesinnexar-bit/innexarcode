@@ -671,6 +671,13 @@ function prepareCopilotRipgrepShimTask(platform: string, arch: string, destinati
 		const appNodeModulesDir = path.join(appBase, 'node_modules.asar.unpacked');
 
 		const builtInCopilotExtensionDir = path.join(appBase, 'extensions', 'copilot');
+		if (!fs.existsSync(builtInCopilotExtensionDir)) {
+			// OSS builds (no private distro) ship without the built-in Copilot
+			// extension, so there is nothing to shim. Log and skip instead of
+			// failing the whole packaging task.
+			console.log('[prepareCopilotRipgrepShim] Built-in copilot extension not present; skipping shim');
+			return;
+		}
 		prepareBuiltInCopilotRipgrepShim(platform, arch, builtInCopilotExtensionDir, appNodeModulesDir);
 	};
 }

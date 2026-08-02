@@ -1,0 +1,111 @@
+name: Build InnexarCode
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'product.json'
+      - '.github/workflows/build-release.yml'
+  workflow_dispatch:
+
+env:
+  VSCODE_ARCH: x64
+
+jobs:
+  build-linux:
+    name: Build Linux x64 (.deb / .rpm / .tar.gz)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Disable Foundry local install
+        run: node build/azure-pipelines/common/disableFoundryLocalInstall.ts
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libxkbfile-dev \
+            libkrb5-dev \
+            libgbm1 \
+            libgtk-3-dev \
+            libsecret-1-dev \
+            libnss3-dev \
+            libx11-dev \
+            libxss1 \
+            libasound2 \
+            rpm \
+            fakeroot \
+            dpkg \
+            xvfb \
+            socat
+          sudo cp build/azure-pipelines/linux/xvfb.init /etc/init.d/xvfb 2>/dev/null || true
+          sudo chmod +x /etc/init.d/xvfb 2>/dev/null || true
+          sudo update-rc.d xvfb defaults 2>/dev/null || true
+          sudo service xvfb start 2>/dev/null || true
+
+      - name: Download vscode sysroots
+        run: |
+          node -e 'import { getVSCodeSysroot } from "./build/linux/debian/install-sysroot.ts"; (async () => { await getVSCodeSysroot("amd64"); })()'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Install dependencies
+        run: |
+          set -e
+          node build/npm/preinstall.ts
+          for i in {1..5}; do
+            npm ci && break
+            if [ $i -eq 5 ]; then
+              echo "npm ci failed too many times" >&2
+              exit 1
+            fi
+            echo "npm ci failed $i, trying again..."
+          done
+        env:
+          npm_config_arch: x64
+          VSCODE_ARCH: x64
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Compile and package
+        run: npm run gulp vscode-linux-x64-min-ci
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          npm_config_arch: x64
+          VSCODE_ARCH: x64
+
+      - name: Build .deb package
+        run: |
+          npm run gulp vscode-linux-x64-prepare-deb
+          npm run gulp vscode-linux-x64-build-deb
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Build .rpm package
+        run: |
+          npm run gulp vscode-linux-x64-prepare-rpm
+          npm run gulp vscode-linux-x64-build-rpm
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: innexarcode-linux-x64
+          path: |
+            VSCode-linux-x64/code.tar.gz
+            VSCode-linux-x64/code.zip
+            .build/linux/deb/amd64/**/*.deb
+            .build/linux/rpm/x86_64/**/*.rpm
+          if-no-files-found: error
